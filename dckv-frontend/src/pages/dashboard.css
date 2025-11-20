@@ -1,0 +1,335 @@
+/* ====== GLOBAL CONTAINER ====== */
+.dash-container {
+  min-height: 100vh;
+  padding: 25px;
+  background: linear-gradient(135deg, #9fc9ff 0%, #c2b5ff 50%, #aef6ff 100%);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  font-family: "Inter", sans-serif;
+  overflow-x: hidden;
+}
+
+/* ====== HEADER ====== */
+.dash-title {
+  text-align: center;
+  font-size: 30px;
+  font-weight: 700;
+  color: #0d256b;
+  margin-bottom: 25px;
+  letter-spacing: 1px;
+}
+
+/* ====== GLASS EFFECT BASE ====== */
+.glass {
+  background: rgba(255, 255, 255, 0.35);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border-radius: 16px;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  transition: 0.25s ease-in-out;
+}
+
+.glass:hover {
+  background: rgba(255, 255, 255, 0.45);
+  transform: translateY(-3px);
+}
+
+/* ====== TOP CONTROL BAR ====== */
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 18px;
+  gap: 18px;
+}
+
+/* Field Blocks */
+.field-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+}
+
+.field-block label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #103a80;
+  margin-bottom: 6px;
+}
+
+/* Input / Date UI */
+.input-icon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: 12px;
+  border: 1px solid rgba(180, 180, 180, 0.35);
+}
+
+.input-icon input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 15px;
+  width: 100%;
+}
+
+/* Benchmark Box */
+.benchmark-box {
+  display: flex;
+  gap: 8px;
+}
+
+.benchmark-box input {
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 15px;
+  border: 1px solid rgba(120, 120, 120, 0.4);
+  background: rgba(255, 255, 255, 0.6);
+  width: 120px;
+}
+
+/* ====== BUTTONS ====== */
+.btn {
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  /* display: flex; */
+  align-items: center;
+  gap: 8px;
+  transition: 0.2s;
+}
+
+.primary {
+  background: #0d47a1;
+  color: white;
+}
+
+.primary:hover {
+  background: #0a357a;
+}
+
+.success {
+  background: #43a047;
+  color: white;
+}
+
+.success:hover {
+  background: #2f7d34;
+}
+
+.small-btn {
+  padding: 8px 12px;
+}
+
+/* ====== LOGOUT ====== */
+.logout-area {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: -15px;
+}
+
+.logout-btn {
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 14px;
+  padding: 10px 16px;
+  font-weight: 600;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* ====== GRID CHART LAYOUT ====== */
+.grid-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 26px;
+  margin-top: 30px;
+}
+
+/* Cards */
+.card {
+  padding: 22px;
+  animation: fadeIn 0.4s ease-in-out;
+  min-height: 320px;
+}
+
+.card h4 {
+  text-align: center;
+  margin-bottom: 15px;
+  font-weight: 600;
+  color: #093075;
+}
+/* ====== KPI ROW ====== */
+.kpi-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px;
+  margin-top: 40px;
+  flex-wrap: nowrap; /* Desktop keeps single row */
+}
+
+/* KPI Card (Desktop) */
+.kpi-card {
+  width: 32%;
+  padding: 24px;
+  text-align: center;
+  border-left: 6px solid #0d47a1;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.kpi-card:nth-child(3) {
+  border-left-color: #43a047;
+}
+
+/* KPI Values text */
+.kpi-value {
+  font-size: 34px;
+  font-weight: 700;
+  margin-top: 8px;
+  margin-bottom: 15px;
+  color: #000;
+}
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .kpi-row {
+    flex-wrap: wrap;       /* allow stacking */
+  }
+
+  .kpi-card {
+    width: 100%;           /* full width on mobile */
+    margin-bottom: 18px;
+  }
+}
+
+
+/* Highlight Last Card (Energy Saved) */
+.kpi-card:nth-child(3) {
+  border-left-color: #43a047;
+}
+
+/* ====== FOOTER ====== */
+.footer {
+  margin-top: 60px;
+  padding: 15px;
+  text-align: center;
+  font-size: 14px;
+  border-radius: 16px;
+  font-weight: 600;
+}
+
+.footer a {
+  color: #0d47a1;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+/* ====== ERROR ====== */
+.error-msg {
+  margin-top: 20px;
+  color: red;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ====== ANIMATIONS ====== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ====== RESPONSIVE ====== */
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .kpi-card {
+    width: calc(50% - 12px);
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .top-bar {
+    flex-direction: column;
+  }
+
+  .kpi-card {
+    width: 100%;
+  }
+
+  .dash-title {
+    font-size: 22px;
+  }
+}
+
+
+
+/* Custom Dropdown Box */
+.select-box {
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(180, 180, 180, 0.35);
+  border-radius: 12px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+}
+
+/* Default Select Hidden Look */
+.select-box select {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0d256b;
+  appearance: none; /* Removes arrow */
+  cursor: pointer;
+}
+
+/* Custom Dropdown Arrow */
+.select-box::after {
+  content: "▼";
+  font-size: 12px;
+  color: #0d256b;
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Dropdown hover */
+.select-box:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(120, 120, 120, 0.5);
+}
+
+/* Style dropdown options */
+select option {
+  background: white;
+  color: black;
+  font-size: 15px;
+}

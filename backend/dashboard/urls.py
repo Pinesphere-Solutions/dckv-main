@@ -30,6 +30,7 @@ from django.contrib import admin
 from django.urls import path
 from dckv import views
 
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/login/', views.login_view),
@@ -40,4 +41,5 @@ urlpatterns = [
     path('api/get-benchmark/', views.get_benchmark),
     path('api/energy-saved/', views.energy_saved),
     path('api/download-report/', views.download_report),
+    
 ]

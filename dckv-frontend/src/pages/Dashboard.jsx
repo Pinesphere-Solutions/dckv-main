@@ -9,51 +9,116 @@ import {
   downloadReport
 } from "../api";
 import "chart.js/auto";
+import "./dashboard.css";
+import { MdCalendarMonth, MdSaveAlt, MdLogout } from "react-icons/md";
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
-  const HOTEL_ID = 1001;
+  const navigate = useNavigate();
+
+  // 🔧 IMPORTANT: make sure these match your data in DB
+  const HOTEL_ID = 1001; // if your client sample uses 1, change this to 1 while testing
   const KITCHEN_ID = 1;
   const MASTER_ID = 11;
 
   const [hoods, setHoods] = useState([]);
   const [selectedMid, setSelectedMid] = useState(MASTER_ID);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0,10));
+  const [selectedDate, setSelectedDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
   const [chartData, setChartData] = useState(null);
+
+  // KPI States
   const [benchmark, setBenchmarkVal] = useState("");
   const [benchmarkInfo, setBenchmarkInfo] = useState(null);
+
   const [energySaved, setEnergySaved] = useState(null);
+  const [duration, setDuration] = useState(0);
+  const [energyConsumed, setEnergyConsumed] = useState(0);
+
   const [error, setError] = useState("");
 
+  // LOGOUT
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
+
+  // Load hoods whenever date changes (so dropdown reflects actual data for that date)
   useEffect(() => {
     loadHoods();
-  }, []);
+  }, [selectedDate]);
 
+  // Load charts + benchmark whenever view/date changes
   useEffect(() => {
     loadChart();
     loadBenchmark();
   }, [selectedMid, selectedDate]);
 
+  // Also recompute KPIs when view/date changes
+  useEffect(() => {
+    handleEnergySaved();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMid, selectedDate]);
+
+  // 🔹 Load hood list for current date
   async function loadHoods() {
-    const res = await fetchHoods(HOTEL_ID, KITCHEN_ID);
-    if (res.hoods) {
-      setHoods(res.hoods);
-      // set default if master exists
-      const foundMaster = res.hoods.find(h => h.id === MASTER_ID);
-      if (foundMaster) setSelectedMid(MASTER_ID);
-      else if (res.hoods.length>0) setSelectedMid(res.hoods[0].id);
+    try {
+      // !! make sure fetchHoods(hotelId, kitchenId, date) is implemented in api.js
+      const res = await fetchHoods(HOTEL_ID, KITCHEN_ID, selectedDate);
+
+      if (res && res.hoods && res.hoods.length > 0) {
+        // remove duplicates if any
+        const unique = Array.from(
+          new Map(res.hoods.map((h) => [h.id, h])).values()
+        );
+
+        setHoods(unique);
+
+        // prefer Master if present
+        const master = unique.find((h) => h.id === MASTER_ID);
+        if (master) {
+          setSelectedMid(MASTER_ID);
+        } else {
+          setSelectedMid(unique[0].id);
+        }
+      } else {
+        // no data for this date → still show Master as fallback
+        const fallback = [{ id: MASTER_ID, label: "Master" }];
+        setHoods(fallback);
+        setSelectedMid(MASTER_ID);
+      }
+    } catch (err) {
+      console.error("Error loading hoods:", err);
+      setError("Failed to load views");
+      // still show Master as fallback
+      const fallback = [{ id: MASTER_ID, label: "Master" }];
+      setHoods(fallback);
+      setSelectedMid(MASTER_ID);
     }
   }
 
   async function loadChart() {
-    const res = await fetchChartData(selectedMid, selectedDate);
-    setChartData(res);
+    try {
+      const res = await fetchChartData(selectedMid, selectedDate);
+      setChartData(res);
+    } catch (err) {
+      console.error("Error loading chart:", err);
+      setChartData(null);
+    }
   }
 
   async function loadBenchmark() {
-    const res = await getBenchmark(HOTEL_ID, KITCHEN_ID, selectedDate);
-    setBenchmarkInfo(res);
-    if (res && res.benchmark) {
-      setBenchmarkVal(String(res.benchmark.value_units_per_hour));
+    try {
+      const res = await getBenchmark(HOTEL_ID, KITCHEN_ID, selectedDate);
+      setBenchmarkInfo(res);
+      if (res && res.benchmark) {
+        setBenchmarkVal(String(res.benchmark.value_units_per_hour));
+      } else if (!res || !res.benchmark) {
+        setBenchmarkVal("");
+      }
+    } catch (err) {
+      console.error("Error loading benchmark:", err);
     }
   }
 
@@ -63,125 +128,232 @@ export default function Dashboard() {
       setError("Please enter numeric value only (Units/Hour).");
       return;
     }
-    // attempt save
-    const res = await setBenchmark(HOTEL_ID, KITCHEN_ID, parseFloat(benchmark), selectedDate);
-    if (res.error) {
-      setError(res.error);
-    } else {
-      alert(res.message || "Benchmark saved");
-      loadBenchmark();
+
+    try {
+      const res = await setBenchmark(
+        HOTEL_ID,
+        KITCHEN_ID,
+        parseFloat(benchmark),
+        selectedDate
+      );
+      if (res.error) {
+        setError(res.error);
+      } else {
+        alert(res.message || "Benchmark saved");
+        loadBenchmark();
+      }
+    } catch (err) {
+      console.error("Error saving benchmark:", err);
+      setError("Failed to save benchmark");
     }
   }
 
+  // 🔹 ENERGY SAVED + KPI UPDATE
   async function handleEnergySaved() {
-    const res = await computeEnergySaved(HOTEL_ID, KITCHEN_ID, selectedMid, selectedDate);
-    if (res.error) {
+    try {
+      const res = await computeEnergySaved(
+        HOTEL_ID,
+        KITCHEN_ID,
+        selectedMid,
+        selectedDate
+      );
+
+      if (res.error) {
+        setError(res.error);
+        setEnergySaved(null);
+        setDuration(0);
+        setEnergyConsumed(0);
+        return;
+      }
+
+      // backend should return: energy_saved, hours_covered (or duration_hours), actual_energy_total
+      setEnergySaved(res.energy_saved ?? 0);
+      setDuration(res.duration_hours ?? res.hours_covered ?? 0);
+      setEnergyConsumed(res.actual_energy_total ?? 0);
+    } catch (err) {
+      console.error("Error computing energy saved:", err);
+      setError("Failed to compute energy saved");
       setEnergySaved(null);
-      setError(res.error);
-    } else {
-      setEnergySaved(res);
+      setDuration(0);
+      setEnergyConsumed(0);
     }
   }
 
-  function buildLineConfig(labels, data, label, yLabel) {
+  function buildLineConfig(labels, data, label) {
     return {
       labels,
       datasets: [
         {
           label,
           data,
-          fill: false,
-          tension: 0.2,
+          borderWidth: 2,
+          tension: 0.25,
+          pointRadius: 0,
         },
       ],
     };
   }
 
   return (
-    <div style={{padding:20}}>
-      <h1 style={{textAlign:"center", color:"#0d47a1"}}>DEMAND CONTROLLED KITCHEN VENTILATION - DCKV</h1>
+    <div className="dash-container">
+      {/* LOGOUT BUTTON */}
+      <div className="logout-area">
+        <button className="btn logout-btn glass" onClick={handleLogout}>
+          <MdLogout size={20} /> Logout
+        </button>
+      </div>
 
-      <div style={{display:"flex",gap:10,alignItems:"center",marginTop:20}}>
-        <div>
-          <label>Select View</label><br/>
-          <select value={selectedMid} onChange={(e)=>setSelectedMid(Number(e.target.value))}>
-            {hoods.map(h=>(
-              <option key={h.id} value={h.id}>{h.label} ({h.id})</option>
-            ))}
-          </select>
+      <h1 className="dash-title">DEMAND CONTROLLED KITCHEN VENTILATION (DCKV)</h1>
+
+      {/* CONTROL BAR */}
+      <div className="top-bar glass">
+        <div className="field-block">
+          <label>View</label>
+          <div className="select-box">
+            <select
+              value={selectedMid}
+              onChange={(e) => setSelectedMid(Number(e.target.value))}
+            >
+              {hoods.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div>
-          <label>Select Date</label><br/>
-          <input type="date" value={selectedDate} onChange={(e)=>setSelectedDate(e.target.value)} />
+        <div className="field-block">
+          <label>Date</label>
+          <div className="input-icon">
+            <MdCalendarMonth size={20} />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
         </div>
 
-        <div style={{marginLeft:"auto"}}>
-          <button onClick={()=>downloadReport(HOTEL_ID, KITCHEN_ID, selectedMid, selectedDate)} style={{background:"#0d47a1", color:"white", padding:"10px 14px", border:"none", borderRadius:6}}>Download Report</button>
+        <div className="field-block">
+          <label>Benchmark (Units/hr)</label>
+          <div className="benchmark-box">
+            <input
+              value={benchmark}
+              onChange={(e) => setBenchmarkVal(e.target.value)}
+              placeholder="Units/hr"
+            />
+            <button className="btn small-btn" onClick={handleSetBenchmark}>
+              <MdSaveAlt size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="download-section">
+          <button
+            className="btn primary"
+            onClick={() =>
+              downloadReport(HOTEL_ID, KITCHEN_ID, selectedMid, selectedDate)
+            }
+          >
+            <MdSaveAlt size={20} /> Download
+          </button>
         </div>
       </div>
 
-      {/* Charts area */}
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginTop:24}}>
-        {/* Left chart */}
-        <div style={{background:"#f5f5f5", padding:12, borderRadius:6, boxShadow:"0 2px 6px rgba(0,0,0,0.08)"}}>
-          <h4 style={{textAlign:"center"}}>
-            {selectedMid === MASTER_ID ? "Exhaust Speed" : "Temperature"}
-          </h4>
+      {/* CHART GRID */}
+      <div className="grid-layout">
+        <div className="glass card">
+          <h4>{selectedMid === MASTER_ID ? "Exhaust Speed" : "Temperature"}</h4>
           {chartData && (
-            <Line data={ buildLineConfig(chartData.x, selectedMid===MASTER_ID ? chartData.exhaust : chartData.temperature,
-                selectedMid===MASTER_ID ? "Exhaust Speed (%)" : "Temperature (°C)") } />
+            <Line
+              data={buildLineConfig(
+                chartData.x,
+                selectedMid === MASTER_ID
+                  ? chartData.exhaust
+                  : chartData.temperature,
+                selectedMid === MASTER_ID
+                  ? "Exhaust Speed (%)"
+                  : "Temperature (°C)"
+              )}
+            />
           )}
         </div>
 
-        {/* Right chart */}
-        <div style={{background:"#f5f5f5", padding:12, borderRadius:6, boxShadow:"0 2px 6px rgba(0,0,0,0.08)"}}>
-          <h4 style={{textAlign:"center"}}>
-            {selectedMid === MASTER_ID ? "Mains Voltage" : "Damper Position"}
-          </h4>
+        <div className="glass card">
+          <h4>{selectedMid === MASTER_ID ? "Mains Voltage" : "Damper Position"}</h4>
           {chartData && (
-            <Line data={ buildLineConfig(chartData.x, selectedMid===MASTER_ID ? chartData.voltage : chartData.damper,
-                selectedMid===MASTER_ID ? "Voltage (V)" : "Damper (%)") } />
+            <Line
+              data={buildLineConfig(
+                chartData.x,
+                selectedMid === MASTER_ID ? chartData.voltage : chartData.damper,
+                selectedMid === MASTER_ID ? "Voltage (V)" : "Damper (%)"
+              )}
+            />
           )}
         </div>
 
-        {/* Bottom left - energy or smoke */}
-        <div style={{gridColumn:"1 / span 1", background:"#f5f5f5", padding:12, borderRadius:6, boxShadow:"0 2px 6px rgba(0,0,0,0.08)"}}>
-          <h4 style={{textAlign:"center"}}>
-            {selectedMid === MASTER_ID ? "Energy Consumption (per interval kWh)" : "Smoke"}
-          </h4>
+        <div className="glass card">
+          <h4>{selectedMid === MASTER_ID ? "Energy Consumption (kWh)" : "Smoke"}</h4>
           {chartData && (
-            <Line data={ buildLineConfig(chartData.x, selectedMid===MASTER_ID ? chartData.energy : chartData.smoke,
-                selectedMid===MASTER_ID ? "Energy (kWh)" : "Smoke (counts)") } />
+            <Line
+              data={buildLineConfig(
+                chartData.x,
+                selectedMid === MASTER_ID ? chartData.energy : chartData.smoke,
+                selectedMid === MASTER_ID ? "Energy (kWh)" : "Smoke"
+              )}
+            />
           )}
-        </div>
-
-        {/* Bottom right - energy saved / benchmark box */}
-        <div style={{display:"flex", flexDirection:"column", gap:10, alignItems:"center"}}>
-          <div style={{width:"100%", background:"#e8f5e9", padding:12, borderRadius:6, textAlign:"center", border:"1px solid #c8e6c9"}}>
-            <strong>Energy Saved</strong>
-            <div style={{fontSize:24, marginTop:6}}>
-              {energySaved ? `${energySaved.energy_saved} kWh` : "—"}
-            </div>
-            <div style={{marginTop:8}}>
-              <button onClick={handleEnergySaved} style={{padding:"8px 10px", background:"#43a047", color:"white", border:"none", borderRadius:6}}>Calculate</button>
-            </div>
-          </div>
-
-          <div style={{width:"100%", background:"#fff", padding:12, borderRadius:6, border:"1px solid #ddd"}}>
-            <div><strong>BENCH MARK Value</strong></div>
-            <div style={{marginTop:8, display:"flex", gap:8}}>
-              <input value={benchmark} onChange={(e)=>setBenchmarkVal(e.target.value)} placeholder="Units/hour" />
-              <button onClick={handleSetBenchmark}>Save</button>
-            </div>
-            <div style={{marginTop:8, fontSize:12, color:"#666"}}>
-              {benchmarkInfo?.message || (benchmarkInfo?.carried ? "Previous value carried forward." : "")}
-            </div>
-          </div>
         </div>
       </div>
 
-      {error && <div style={{color:"red", marginTop:12}}>{error}</div>}
+      {/* KPI ROW */}
+      <div className="kpi-row">
+        <div className="glass kpi-card">
+          <h4>Duration</h4>
+          <div className="kpi-value">
+            {duration !== null && duration !== undefined
+              ? `${Number(duration).toFixed(2)} hrs`
+              : "—"}
+          </div>
+        </div>
+
+        <div className="glass kpi-card">
+          <h4>Energy Consumed</h4>
+          <div className="kpi-value">
+            {energyConsumed !== null && energyConsumed !== undefined
+              ? `${Number(energyConsumed).toFixed(2)} kWh`
+              : "—"}
+          </div>
+        </div>
+
+        <div className="glass kpi-card">
+          <h4>Energy Saved</h4>
+          <div className="kpi-value">
+            {energySaved !== null && energySaved !== undefined
+              ? `${Number(energySaved).toFixed(2)} kWh`
+              : "—"}
+          </div>
+
+          <button className="btn success" onClick={handleEnergySaved}>
+            Calculate
+          </button>
+        </div>
+      </div>
+
+      {/* FOOTER */}
+      <footer className="footer glass">
+        © All Rights Reserved —
+        <a
+          href="https://pinesphere.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          &nbsp;Pinesphere
+        </a>
+      </footer>
+
+      {error && <div className="error-msg">{error}</div>}
     </div>
   );
 }

@@ -48,3 +48,5 @@ class Benchmark(models.Model):
     def __str__(self):
         return f"BM {self.hotel_id}-{self.kitchen_id}-{self.date}={self.value_units_per_hour}"
 
+
+
