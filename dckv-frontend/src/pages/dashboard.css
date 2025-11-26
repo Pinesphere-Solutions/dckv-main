@@ -30,6 +30,7 @@
   transition: 0.25s ease-in-out;
 }
 
+
 .glass:hover {
   background: rgba(255, 255, 255, 0.45);
   transform: translateY(-3px);
@@ -114,6 +115,15 @@
   background: #0a357a;
 }
 
+.download-section .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;  /* adjust to your preference */
+
+}
+
+
 .success {
   background: #43a047;
   color: white;
@@ -140,7 +150,12 @@
   border-radius: 14px;
   padding: 10px 16px;
   font-weight: 600;
+  
+  display: inline-flex;   /* makes icon + text align horizontally */
+  align-items: center;    /* vertically centers the icon */
+  gap: 6px;               /* space between icon & text */
 }
+
 
 .logout-btn:hover {
   background: rgba(255, 255, 255, 0.7);
@@ -217,6 +232,26 @@
 .kpi-card:nth-child(3) {
   border-left-color: #43a047;
 }
+
+
+
+/* ===== PREMIUM KPI BACKGROUNDS ===== */
+
+.kpi-duration {
+  background: linear-gradient(to bottom right, #3b82f6, #93c5fd);
+  border-left-color: #1e40af !important; /* deep blue */
+}
+
+.kpi-consumed {
+  background: linear-gradient(to bottom right, #f59e0b, #fde68a);
+  border-left-color: #b45309 !important; /* rich amber */
+}
+
+.kpi-saved {
+  background: linear-gradient(to bottom right, #22c55e, #bbf7d0);
+  border-left-color: #15803d !important; /* deep green */
+}
+
 
 /* ====== FOOTER ====== */
 .footer {
@@ -304,7 +339,7 @@
   outline: none;
   padding: 6px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   color: #0d256b;
   appearance: none; /* Removes arrow */
   cursor: pointer;
@@ -332,4 +367,19 @@ select option {
   background: white;
   color: black;
   font-size: 15px;
+}
+
+
+
+
+
+/* Chart Cards */
+.grid-layout .card {
+  background: #ffffff !important; /* force white background */
+  border-radius: 14px;
+  border: 1px solid #e0e0e0;
+  padding: 20px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  -webkit-backdrop-filter: none; /* remove glass blur */
+  backdrop-filter: none; /* remove glass blur */
 }

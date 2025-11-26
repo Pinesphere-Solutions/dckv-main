@@ -155,7 +155,15 @@ class Command(BaseCommand):
                 )
                 rows_created += 1
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"Row import failed: {e}"))
+                self.stdout.write(self.style.ERROR(f"Row import failed: {e}")) 
                 continue
 
         self.stdout.write(self.style.SUCCESS(f"Successfully imported {rows_created} rows!"))
+
+
+
+
+
+
+
+

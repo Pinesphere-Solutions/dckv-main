@@ -42,7 +42,7 @@ export default function App() {
 
 
 
-export async function fetchHoods(hotelId, kitchenId, date) {
-  const res = await fetch(`http://localhost:8000/api/hoods/${hotelId}/${kitchenId}/${date}/`);
-  return res.json();
-}
+// export async function fetchHoods(hotelId, kitchenId, date) {
+//   const res = await fetch(`http://localhost:8000/api/hoods/${hotelId}/${kitchenId}/${date}/`);
+//   return res.json();
+// }

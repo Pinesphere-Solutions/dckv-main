@@ -156,7 +156,7 @@ def hoods_list(request):
         ]
     })
 
-# ---------- GET CHART DATA ----------
+# ---------- GET CHART DATA (UPDATED WITH TRIM & NEXT INTERVAL START) ----------
 @api_view(["GET"])
 def chart_data(request):
     mid = request.query_params.get("mid_hid")
@@ -179,36 +179,43 @@ def chart_data(request):
 
     # ---------------- MASTER UNIT CHART ----------------
     if mid == 11:
-        xs = []
-        exhaust_series = []
-        voltage_series = []
-        energy_series = []   # cumulative energy!!
+        xs, exhaust_series, energy_rate_series, volts_series = [], [], [], []
+        prev_energy = None
+        prev_time = None
 
         for r in readings:
+
+            # 🔥 convert UTC -> IST
             dt_local = r.datetime_end.astimezone(IST)
+
             label = dt_local.strftime("%H:%M")
             xs.append(label)
 
             exhaust_series.append(r.exhaust_speed or 0)
-            voltage_series.append(r.mains_voltage or 0)
+            volts_series.append(r.mains_voltage or 0)
 
-            # ⭐ USE DIRECT CUMULATIVE ENERGY (not delta)
-            energy_series.append(round(r.energy_cum or 0, 3))
+            # ---- Energy conversion to kWh/hr ----
+            if prev_energy is None:
+                energy_rate_series.append(0)
+            else:
+                delta_energy = r.energy_cum - prev_energy
+                delta_seconds = (dt_local - prev_time).total_seconds()
+
+                rate_per_hr = (delta_energy * 3600 / delta_seconds) if delta_seconds > 0 else 0
+                energy_rate_series.append(max(rate_per_hr, 0))
+
+            prev_energy = r.energy_cum
+            prev_time = dt_local
 
         return Response({
             "x": xs,
             "exhaust": exhaust_series,
-            "energy": energy_series,   # direct cumulative
-            "voltage": voltage_series
+            "energy": energy_rate_series,
+            "voltage": volts_series
         })
 
-
-
-    # ---------------- HOOD UNIT CHART (no change) ----------------
-    xs = []
-    temp_series = []
-    smoke_series = []
-    damper_series = []
+    # ---------------- HOOD UNIT CHART ----------------
+    xs, temp_series, smoke_series, damper_series = [], [], [], []
 
     for r in readings:
         dt_local = r.datetime_end.astimezone(IST)
@@ -224,7 +231,6 @@ def chart_data(request):
         "smoke": smoke_series,
         "damper": damper_series
     })
-
 
 
 
@@ -315,26 +321,8 @@ def energy_saved(request):
     avg_consumption = round(total_energy / duration_hours, 2)
 
     # --- BENCHMARK ---
-    bm_obj = Benchmark.objects.filter(
-        hotel_id=hotel,
-        kitchen_id=kitchen,
-        date=the_date
-    ).first()
-
-    if bm_obj:
-        bm = bm_obj.value_units_per_hour
-    else:
-        prev_bm = Benchmark.objects.filter(
-            hotel_id=hotel,
-            kitchen_id=kitchen,
-            date__lt=the_date
-        ).order_by("-date").first()
-        if prev_bm:
-            bm = prev_bm.value_units_per_hour
-        else:
-            # infer from data
-            bm = infer_benchmark_from_data(hotel, kitchen, mid, the_date)
-            # bm = 10 
+    bm_obj = Benchmark.objects.filter(date=the_date).first()
+    bm = bm_obj.value_units_per_hour if bm_obj else 10
 
     # ---- SAVED PER HOUR ----
     saved_per_hour = round(bm - avg_consumption, 2)

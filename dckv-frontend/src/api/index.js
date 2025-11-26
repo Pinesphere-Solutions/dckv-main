@@ -41,3 +41,6 @@ export async function computeEnergySaved(hotel_id, kitchen_id, mid_hid, dateStr)
 export async function downloadReport(hotel_id, kitchen_id, mid_hid, dateStr) {
   window.location = `${API_BASE}/download-report/?hotel_id=${hotel_id}&kitchen_id=${kitchen_id}&mid_hid=${mid_hid}&date=${dateStr}`;
 }
+
+
+
