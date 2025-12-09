@@ -383,3 +383,27 @@ select option {
   -webkit-backdrop-filter: none; /* remove glass blur */
   backdrop-filter: none; /* remove glass blur */
 }
+
+/* **************************************************************************** */
+
+.axis-labels {
+  text-align: center;
+  margin-top: 16px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 10px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.axis-labels .y-axis {
+  font-weight: 600;
+  color: #0059b3; /* Professional blue */
+}
+
+.axis-labels .x-axis {
+  font-weight: 600;
+  color: #ff4d4d; /* Premium red */
+}
+
+

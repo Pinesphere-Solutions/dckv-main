@@ -49,18 +49,15 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadHoods();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   useEffect(() => {
     loadChart();
     loadBenchmark();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMid, selectedDate]);
 
   useEffect(() => {
     handleEnergySaved();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMid, selectedDate]);
 
   // -------------------------------------------
@@ -94,7 +91,6 @@ export default function Dashboard() {
         showToast(res.error, "error");
         setChartData({ x: [], exhaust: [], voltage: [], energy: [], temperature: [], smoke: [], damper: [] });
       } else {
-        // ensure arrays exist
         setChartData({
           x: Array.isArray(res.x) ? res.x : [],
           exhaust: Array.isArray(res.exhaust) ? res.exhaust : [],
@@ -120,10 +116,10 @@ export default function Dashboard() {
 
       if (res.found === true) {
         setBenchmarkVal(String(res.benchmark.value_units_per_hour));
-        setHasBenchmark(true); // lock field
+        setHasBenchmark(true);
       } else if (res.carried === true) {
         setBenchmarkVal(String(res.benchmark.value_units_per_hour));
-        setHasBenchmark(false); // allow editing when carried
+        setHasBenchmark(false);
       } else {
         setBenchmarkVal("");
         setHasBenchmark(false);
@@ -165,31 +161,41 @@ export default function Dashboard() {
       if (res.error) {
         showToast(res.error, "error");
         setEnergySaved(null);
-        setDuration(0);
         setEnergyConsumed(0);
+        setDuration(0);
         return;
       }
 
       setEnergySaved(res.energy_saved ?? 0);
-      setDuration(res.duration_hours ?? 0);
       setEnergyConsumed(res.energy_consumed ?? 0);
+      setDuration(res.duration_hours ?? 0);
     } catch {
       showToast("Failed to compute energy saved", "error");
       setEnergySaved(null);
-      setDuration(0);
       setEnergyConsumed(0);
+      setDuration(0);
     }
   }
 
-  // -----------------------------------------------------------------
-  // Chart OPTIONS (Option A — Same Style For All Charts)
-  // -----------------------------------------------------------------
+  // -------------------------------------------
+  // Disable Benchmark if:
+  //  1) Benchmark exists
+  //  2) Selected date is in the past
+  // -------------------------------------------
+  const today = new Date().toISOString().slice(0, 10);
+  const isPastDate = selectedDate < today;
+
+  const disableBenchmarkField = hasBenchmark || isPastDate;
+
+  // -------------------------------------------
+  // Chart OPTIONS
+  // -------------------------------------------
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
       x: {
-        ticks: { color: "#444", maxRotation: 45, autoSkip: true, maxTicksLimit: 24 },
+        ticks: { color: "#444", autoSkip: true, maxTicksLimit: 24 },
         grid: { color: "#eaeaea" }
       },
       y: {
@@ -212,47 +218,27 @@ export default function Dashboard() {
       }
     },
     plugins: {
-      legend: {
-        labels: { color: "#333", boxWidth: 20 }
-      },
+      legend: { labels: { color: "#333" } },
       zoom: {
-        zoom: {
-          wheel: { enabled: true },
-          pinch: { enabled: true },
-          mode: "x"
-        },
-        pan: {
-          enabled: true,
-          mode: "x"
-        }
+        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x" },
+        pan: { enabled: true, mode: "x" }
       }
     }
   };
 
-  // -----------------------------------------------------------------
-  // helpers to build datasets — we add dataset-level visual props so
-  // every chart has consistent thinner lines & colored dots
-  // -----------------------------------------------------------------
-  function buildLineConfig(labels, data, label, datasetColor = "#3b82f6", pointColor = "#ff4d4d") {
-    // Ensure labels/data lengths match — Chart.js handles mismatched lengths but we try to be tidy
-    const safeLabels = Array.isArray(labels) ? labels : [];
-    const safeData = Array.isArray(data) ? data : [];
-
+  function buildLineConfig(labels, data, label, lineColor = "#3b82f6", pointColor = "#ff4d4d") {
     return {
-      labels: safeLabels,
+      labels,
       datasets: [
         {
           label,
-          data: safeData,
-          borderColor: datasetColor,
-          backgroundColor: datasetColor,
+          data,
+          borderColor: lineColor,
           pointBackgroundColor: pointColor,
-          pointBorderColor: "#ffffff",
+          pointBorderColor: "#fff",
           pointRadius: 3,
-          pointHoverRadius: 5,
-          borderWidth: 1.25,
           tension: 0.35,
-          fill: false
+          borderWidth: 1.25
         }
       ]
     };
@@ -263,9 +249,9 @@ export default function Dashboard() {
     return `Hood Control Unit ${mid - 20}`;
   }
 
-  // -----------------------------------------------------------------
+  // -------------------------------------------
   // RENDER UI
-  // -----------------------------------------------------------------
+  // -------------------------------------------
   return (
     <div className="dash-container">
       <div className="logout-area">
@@ -273,8 +259,8 @@ export default function Dashboard() {
           className="btn logout-btn glass"
           onClick={() => {
             localStorage.removeItem("token");
-            showToast("Logged out", "info");
             navigate("/login");
+            showToast("Logged out", "info");
           }}
         >
           <MdLogout size={20} /> Logout
@@ -302,7 +288,12 @@ export default function Dashboard() {
           <label>Select Date</label>
           <div className="input-icon">
             <MdCalendarMonth size={20} />
-            <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              max={today}   // disable future dates
+            />
           </div>
         </div>
 
@@ -313,19 +304,20 @@ export default function Dashboard() {
               value={benchmark}
               onChange={(e) => setBenchmarkVal(e.target.value)}
               placeholder="Units/hr"
-              disabled={hasBenchmark}
+              disabled={disableBenchmarkField}
               style={{
-                backgroundColor: hasBenchmark ? "rgba(0,255,0,0.18)" : "white",
-                cursor: hasBenchmark ? "not-allowed" : "text"
+                backgroundColor: disableBenchmarkField ? "rgba(0,255,0,0.18)" : "white",
+                cursor: disableBenchmarkField ? "not-allowed" : "text"
               }}
             />
+
             <button
               className="btn small-btn"
               onClick={handleSetBenchmark}
-              disabled={hasBenchmark}
+              disabled={disableBenchmarkField}
               style={{
-                opacity: hasBenchmark ? 0.5 : 1,
-                cursor: hasBenchmark ? "not-allowed" : "pointer"
+                opacity: disableBenchmarkField ? 0.5 : 1,
+                cursor: disableBenchmarkField ? "not-allowed" : "pointer"
               }}
             >
               <RiSave3Fill size={20} />
@@ -334,7 +326,10 @@ export default function Dashboard() {
         </div>
 
         <div className="download-section">
-          <button className="btn primary" onClick={() => downloadReport(HOTEL_ID, KITCHEN_ID, selectedMid, selectedDate)}>
+          <button
+            className="btn primary"
+            onClick={() => downloadReport(HOTEL_ID, KITCHEN_ID, selectedMid, selectedDate)}
+          >
             <MdSaveAlt size={20} /> Download Report
           </button>
         </div>
@@ -342,8 +337,11 @@ export default function Dashboard() {
 
       {/* CHARTS */}
       <div className="grid-layout">
+
+        {/* Chart 1 */}
         <div className="glass card">
           <h4>{selectedMid === MASTER_ID ? "Exhaust Speed" : "Temperature"}</h4>
+
           <div style={{ height: 320 }}>
             <Line
               options={chartOptions}
@@ -351,15 +349,24 @@ export default function Dashboard() {
                 chartData?.x || [],
                 selectedMid === MASTER_ID ? chartData?.exhaust || [] : chartData?.temperature || [],
                 selectedMid === MASTER_ID ? "Exhaust Speed (%)" : "Temperature (°C)",
-                "#2b9cff", // line color
-                "#ff4d4d"  // dot color (same tone)
+                "#2b9cff",
+                "#ff4d4d"
               )}
             />
           </div>
+
+          <div className="axis-labels">
+            <span className="y-axis">
+              {selectedMid === MASTER_ID ? "Y axis - Speed (%)" : "Y axis - Temperature (°C)"}
+            </span>
+            <span className="x-axis">X axis - Time (HH:MM)</span>
+          </div>
         </div>
 
+        {/* Chart 2 */}
         <div className="glass card">
           <h4>{selectedMid === MASTER_ID ? "Mains Voltage" : "Damper Position"}</h4>
+
           <div style={{ height: 320 }}>
             <Line
               options={chartOptions}
@@ -372,10 +379,19 @@ export default function Dashboard() {
               )}
             />
           </div>
+
+          <div className="axis-labels">
+            <span className="y-axis">
+              {selectedMid === MASTER_ID ? "Y axis - Voltage (V)" : "Y axis - Damper (%)"}
+            </span>
+            <span className="x-axis">X axis - Time (HH:MM)</span>
+          </div>
         </div>
 
+        {/* Chart 3 */}
         <div className="glass card">
-          <h4>{selectedMid === MASTER_ID ? "Energy Consumption (kWh/hr)" : "Smoke"}</h4>
+          <h4>{selectedMid === MASTER_ID ? "Energy Consumption (kWh)" : "Smoke"}</h4>
+
           <div style={{ height: 320 }}>
             <Line
               options={chartOptions}
@@ -388,34 +404,49 @@ export default function Dashboard() {
               )}
             />
           </div>
-        </div>
-      </div>
 
-      {/* KPI */}
-      <div className="kpi-row">
-
-        <div className="glass kpi-card kpi-duration">
-          <h4>Duration</h4>
-          <div className="kpi-value">
-            {duration ? `${duration.toFixed(2)} hrs` : "—"}
-          </div>
-        </div>
-
-        <div className="glass kpi-card kpi-consumed">
-          <h4>Energy Consumed</h4>
-          <div className="kpi-value">
-            {energyConsumed ? `${energyConsumed.toFixed(2)} kWh` : "—"}
-          </div>
-        </div>
-
-        <div className="glass kpi-card kpi-saved">
-          <h4>Energy Saved</h4>
-          <div className="kpi-value">
-            {energySaved ? `${energySaved.toFixed(2)} kWh` : "—"}
+          <div className="axis-labels">
+            <span className="y-axis">
+              {selectedMid === MASTER_ID ? "Y axis - Energy (kWh)" : "Y axis - Smoke Level"}
+            </span>
+            <span className="x-axis">X axis - Time (HH:MM)</span>
           </div>
         </div>
 
       </div>
+
+      {/* KPI SECTION — ONLY SHOW FOR MASTER UNIT */}
+      {selectedMid === MASTER_ID && (
+        <div className="kpi-row">
+
+          {/* Duration */}
+          <div className="glass kpi-card kpi-duration">
+            <h4>Duration</h4>
+            <div className="kpi-value">
+              {duration ? `${duration.toFixed(2)} hrs` : "—"}
+            </div>
+          </div>
+
+          {/* Total Energy Consumed */}
+          <div className="glass kpi-card kpi-consumed">
+            <h4>Total Energy Consumed</h4>
+            <div className="kpi-value">
+              {energyConsumed ? `${energyConsumed.toFixed(2)} kWh` : "—"}
+            </div>
+          </div>
+
+          {/* Energy Saved */}
+          <div className="glass kpi-card kpi-saved">
+            <h4>Energy Saved</h4>
+            <div className="kpi-value">
+              {energySaved ? `${energySaved.toFixed(2)} kWh` : "—"}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+
 
       {/* FOOTER */}
       <footer className="footer glass">

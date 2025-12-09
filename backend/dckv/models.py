@@ -15,8 +15,8 @@ class DeviceReading(models.Model):
     mains_voltage = models.FloatField(null=True, blank=True)    # D11
     energy_cum = models.FloatField(null=True, blank=True)       # D12 cumulative kWh
     log_id = models.IntegerField(null=True, blank=True)         # D13
-    reserve1 = models.IntegerField(null=True, blank=True)       # D14
-    reserve2 = models.IntegerField(null=True, blank=True)       # D15
+    energy_interval = models.FloatField(null=True, blank=True)     # D14 (kWh per interval)
+    interval_minutes = models.FloatField(null=True, blank=True)    # D15 (duration in minutes)
 
     # stored derived datetime for sorting
     datetime_end = models.DateTimeField(null=True, blank=True)

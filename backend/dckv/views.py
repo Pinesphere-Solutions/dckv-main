@@ -85,8 +85,9 @@ def ingest_view(request):
         mains = try_float(data.get("D11"))
         energy_cum = try_float(data.get("D12"))
         logid = try_int(data.get("D13"))
-        r1 = try_int(data.get("D14"))
-        r2 = try_int(data.get("D15"))
+        energy_interval = try_float(data.get("D14"))   # kWh per interval
+        interval_minutes = try_float(data.get("D15"))  # minutes per interval
+
 
         # compute datetime_end
         datetime_end = None
@@ -107,8 +108,8 @@ def ingest_view(request):
             mains_voltage=mains,
             energy_cum=energy_cum,
             log_id=logid,
-            reserve1=r1,
-            reserve2=r2,
+            energy_interval=energy_interval,
+            interval_minutes=interval_minutes,
             datetime_end=datetime_end
         )
         return Response({"code": 200, "message": "Data stored successfully"})
@@ -278,7 +279,9 @@ def get_benchmark(request):
                          "message": "No new BENCH MARK Value entered. Previous value carried forward."})
     return Response({"found": False, "carried": False, "message": "No benchmark available."})
 
-# ---------- ENERGY SAVED ----------
+
+
+# ---------- ENERGY SAVED (NEW LOGIC) ----------
 @api_view(["GET"])
 def energy_saved(request):
     hotel = int(request.query_params.get("hotel_id"))
@@ -290,6 +293,7 @@ def energy_saved(request):
     if not the_date:
         return Response({"error": "Invalid date"}, status=400)
 
+    # Fetch all rows for this MID + date
     readings = list(DeviceReading.objects.filter(
         mid_hid=mid,
         date=the_date
@@ -298,23 +302,32 @@ def energy_saved(request):
     if not readings:
         return Response({"error": "No readings found for this date"}, status=404)
 
-    # --- TOTAL ENERGY BASED ON CUMULATIVE ---
-    first_val = float(readings[0].energy_cum or 0)
-    last_val = float(readings[-1].energy_cum or 0)
-    total_energy = round(last_val - first_val, 2)
+    # ----------------------------------------
+    # NEW LOGIC: SUM ENERGY INTERVALS (D14)
+    # ----------------------------------------
+    total_energy_consumed = 0
+    for r in readings:
+        if r.energy_interval:         # renamed from reserve1
+            total_energy_consumed += float(r.energy_interval)
 
-    # --- DURATION ---
-    dt_start = readings[0].datetime_end
-    dt_end = readings[-1].datetime_end
-    duration_hours = round((dt_end - dt_start).total_seconds() / 3600, 2)
+    total_energy_consumed = round(total_energy_consumed, 2)
+
+    # ----------------------------------------
+    # NEW LOGIC: SUM INTERVAL DURATION (D15)
+    # ----------------------------------------
+    total_minutes = 0
+    for r in readings:
+        if r.interval_minutes:        # renamed from reserve2
+            total_minutes += float(r.interval_minutes)
+
+    duration_hours = round(total_minutes / 60, 2)
 
     if duration_hours <= 0:
         return Response({"error": "Invalid duration"}, status=400)
 
-    # ---- CONVERT TO AVERAGE ENERGY (kWh/hr) ----
-    avg_consumption = round(total_energy / duration_hours, 2)
-
-    # --- BENCHMARK ---
+    # ----------------------------------------
+    # BENCHMARK (same logic as before)
+    # ----------------------------------------
     bm_obj = Benchmark.objects.filter(
         hotel_id=hotel,
         kitchen_id=kitchen,
@@ -329,22 +342,30 @@ def energy_saved(request):
             kitchen_id=kitchen,
             date__lt=the_date
         ).order_by("-date").first()
-        if prev_bm:
-            bm = prev_bm.value_units_per_hour
-        else:
-            # infer from data
-            bm = infer_benchmark_from_data(hotel, kitchen, mid, the_date)
-            # bm = 10 
+        bm = prev_bm.value_units_per_hour if prev_bm else infer_benchmark_from_data(hotel, kitchen, mid, the_date)
 
-    # ---- SAVED PER HOUR ----
-    saved_per_hour = round(bm - avg_consumption, 2)
+    # ----------------------------------------
+    # ENERGY CONSUMPTION AS PER BENCHMARK
+    # ----------------------------------------
+    benchmark_energy = round(duration_hours * bm, 2)
 
+    # ----------------------------------------
+    # ENERGY SAVED
+    # ----------------------------------------
+    energy_saved = round(benchmark_energy - total_energy_consumed, 2)
+
+    # ----------------------------------------
+    # RESPONSE
+    # ----------------------------------------
     return Response({
         "duration_hours": duration_hours,
-        "energy_consumed": avg_consumption,  # DISPLAY VALUE
-        "energy_saved": saved_per_hour,      # DISPLAY VALUE
-        "benchmark": bm
+        "energy_consumed": total_energy_consumed,
+        "energy_saved": energy_saved,
+        "benchmark": bm,
+        "benchmark_energy": benchmark_energy
     })
+
+
 
 
 # ---------- INFER BENCHMARK FROM DATA ----------
@@ -377,6 +398,8 @@ def infer_benchmark_from_data(hotel, kitchen, mid, the_date):
     avg_per_interval = sum(deltas) / len(deltas)
     units_per_hour = avg_per_interval * 4.0
     return units_per_hour
+
+
 
 # ---------- DOWNLOAD REPORT ----------
 @api_view(["GET"])

@@ -15,7 +15,7 @@ import json
 
 from datetime import datetime
 from django.utils.dateparse import parse_date
-from zoneinfo import ZoneInfo   # 🔥 Recommended in Python 3.9+
+from zoneinfo import ZoneInfo   
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from dckv.models import DeviceReading
@@ -85,8 +85,9 @@ def ingest_view(request):
         mains = try_float(data.get("D11"))
         energy_cum = try_float(data.get("D12"))
         logid = try_int(data.get("D13"))
-        r1 = try_int(data.get("D14"))
-        r2 = try_int(data.get("D15"))
+        energy_interval = try_float(data.get("D14"))   # kWh per interval
+        interval_minutes = try_float(data.get("D15"))  # minutes per interval
+
 
         # compute datetime_end
         datetime_end = None
@@ -107,8 +108,8 @@ def ingest_view(request):
             mains_voltage=mains,
             energy_cum=energy_cum,
             log_id=logid,
-            reserve1=r1,
-            reserve2=r2,
+            energy_interval=energy_interval,
+            interval_minutes=interval_minutes,
             datetime_end=datetime_end
         )
         return Response({"code": 200, "message": "Data stored successfully"})
@@ -156,7 +157,7 @@ def hoods_list(request):
         ]
     })
 
-# ---------- GET CHART DATA (UPDATED WITH TRIM & NEXT INTERVAL START) ----------
+# ---------- GET CHART DATA ----------
 @api_view(["GET"])
 def chart_data(request):
     mid = request.query_params.get("mid_hid")
@@ -179,43 +180,36 @@ def chart_data(request):
 
     # ---------------- MASTER UNIT CHART ----------------
     if mid == 11:
-        xs, exhaust_series, energy_rate_series, volts_series = [], [], [], []
-        prev_energy = None
-        prev_time = None
+        xs = []
+        exhaust_series = []
+        voltage_series = []
+        energy_series = []   # cumulative energy!!
 
         for r in readings:
-
-            # 🔥 convert UTC -> IST
             dt_local = r.datetime_end.astimezone(IST)
-
             label = dt_local.strftime("%H:%M")
             xs.append(label)
 
             exhaust_series.append(r.exhaust_speed or 0)
-            volts_series.append(r.mains_voltage or 0)
+            voltage_series.append(r.mains_voltage or 0)
 
-            # ---- Energy conversion to kWh/hr ----
-            if prev_energy is None:
-                energy_rate_series.append(0)
-            else:
-                delta_energy = r.energy_cum - prev_energy
-                delta_seconds = (dt_local - prev_time).total_seconds()
-
-                rate_per_hr = (delta_energy * 3600 / delta_seconds) if delta_seconds > 0 else 0
-                energy_rate_series.append(max(rate_per_hr, 0))
-
-            prev_energy = r.energy_cum
-            prev_time = dt_local
+            # ⭐ USE DIRECT CUMULATIVE ENERGY (not delta)
+            energy_series.append(round(r.energy_cum or 0, 3))
 
         return Response({
             "x": xs,
             "exhaust": exhaust_series,
-            "energy": energy_rate_series,
-            "voltage": volts_series
+            "energy": energy_series,   # direct cumulative
+            "voltage": voltage_series
         })
 
-    # ---------------- HOOD UNIT CHART ----------------
-    xs, temp_series, smoke_series, damper_series = [], [], [], []
+
+
+    # ---------------- HOOD UNIT CHART (no change) ----------------
+    xs = []
+    temp_series = []
+    smoke_series = []
+    damper_series = []
 
     for r in readings:
         dt_local = r.datetime_end.astimezone(IST)
@@ -231,6 +225,7 @@ def chart_data(request):
         "smoke": smoke_series,
         "damper": damper_series
     })
+
 
 
 
@@ -284,7 +279,9 @@ def get_benchmark(request):
                          "message": "No new BENCH MARK Value entered. Previous value carried forward."})
     return Response({"found": False, "carried": False, "message": "No benchmark available."})
 
-# ---------- ENERGY SAVED ----------
+
+
+# ---------- ENERGY SAVED (NEW LOGIC) ----------
 @api_view(["GET"])
 def energy_saved(request):
     hotel = int(request.query_params.get("hotel_id"))
@@ -296,6 +293,7 @@ def energy_saved(request):
     if not the_date:
         return Response({"error": "Invalid date"}, status=400)
 
+    # Fetch all rows for this MID + date
     readings = list(DeviceReading.objects.filter(
         mid_hid=mid,
         date=the_date
@@ -304,35 +302,70 @@ def energy_saved(request):
     if not readings:
         return Response({"error": "No readings found for this date"}, status=404)
 
-    # --- TOTAL ENERGY BASED ON CUMULATIVE ---
-    first_val = float(readings[0].energy_cum or 0)
-    last_val = float(readings[-1].energy_cum or 0)
-    total_energy = round(last_val - first_val, 2)
+    # ----------------------------------------
+    # NEW LOGIC: SUM ENERGY INTERVALS (D14)
+    # ----------------------------------------
+    total_energy_consumed = 0
+    for r in readings:
+        if r.energy_interval:         # renamed from reserve1
+            total_energy_consumed += float(r.energy_interval)
 
-    # --- DURATION ---
-    dt_start = readings[0].datetime_end
-    dt_end = readings[-1].datetime_end
-    duration_hours = round((dt_end - dt_start).total_seconds() / 3600, 2)
+    total_energy_consumed = round(total_energy_consumed, 2)
+
+    # ----------------------------------------
+    # NEW LOGIC: SUM INTERVAL DURATION (D15)
+    # ----------------------------------------
+    total_minutes = 0
+    for r in readings:
+        if r.interval_minutes:        # renamed from reserve2
+            total_minutes += float(r.interval_minutes)
+
+    duration_hours = round(total_minutes / 60, 2)
 
     if duration_hours <= 0:
         return Response({"error": "Invalid duration"}, status=400)
 
-    # ---- CONVERT TO AVERAGE ENERGY (kWh/hr) ----
-    avg_consumption = round(total_energy / duration_hours, 2)
+    # ----------------------------------------
+    # BENCHMARK (same logic as before)
+    # ----------------------------------------
+    bm_obj = Benchmark.objects.filter(
+        hotel_id=hotel,
+        kitchen_id=kitchen,
+        date=the_date
+    ).first()
 
-    # --- BENCHMARK ---
-    bm_obj = Benchmark.objects.filter(date=the_date).first()
-    bm = bm_obj.value_units_per_hour if bm_obj else 10
+    if bm_obj:
+        bm = bm_obj.value_units_per_hour
+    else:
+        prev_bm = Benchmark.objects.filter(
+            hotel_id=hotel,
+            kitchen_id=kitchen,
+            date__lt=the_date
+        ).order_by("-date").first()
+        bm = prev_bm.value_units_per_hour if prev_bm else infer_benchmark_from_data(hotel, kitchen, mid, the_date)
 
-    # ---- SAVED PER HOUR ----
-    saved_per_hour = round(bm - avg_consumption, 2)
+    # ----------------------------------------
+    # ENERGY CONSUMPTION AS PER BENCHMARK
+    # ----------------------------------------
+    benchmark_energy = round(duration_hours * bm, 2)
 
+    # ----------------------------------------
+    # ENERGY SAVED
+    # ----------------------------------------
+    energy_saved = round(benchmark_energy - total_energy_consumed, 2)
+
+    # ----------------------------------------
+    # RESPONSE
+    # ----------------------------------------
     return Response({
         "duration_hours": duration_hours,
-        "energy_consumed": avg_consumption,  # DISPLAY VALUE
-        "energy_saved": saved_per_hour,      # DISPLAY VALUE
-        "benchmark": bm
+        "energy_consumed": total_energy_consumed,
+        "energy_saved": energy_saved,
+        "benchmark": bm,
+        "benchmark_energy": benchmark_energy
     })
+
+
 
 
 # ---------- INFER BENCHMARK FROM DATA ----------
@@ -365,6 +398,8 @@ def infer_benchmark_from_data(hotel, kitchen, mid, the_date):
     avg_per_interval = sum(deltas) / len(deltas)
     units_per_hour = avg_per_interval * 4.0
     return units_per_hour
+
+
 
 # ---------- DOWNLOAD REPORT ----------
 @api_view(["GET"])
