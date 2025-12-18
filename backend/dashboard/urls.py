@@ -32,5 +32,9 @@ urlpatterns = [
     path('api/get-benchmark/', views.get_benchmark),
     path('api/energy-saved/', views.energy_saved),
     path('api/download-report/', views.download_report),
+    # path('api/context/', views.context, name='context'),
+
     
 ]
+
+

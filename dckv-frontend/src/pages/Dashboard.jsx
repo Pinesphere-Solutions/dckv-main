@@ -26,7 +26,7 @@ Chart.register(zoomPlugin);
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  const HOTEL_ID = 1001;
+  const HOTEL_ID = 1; 
   const KITCHEN_ID = 1;
   const MASTER_ID = 11;
 
@@ -120,6 +120,10 @@ export default function Dashboard() {
       } else if (res.carried === true) {
         setBenchmarkVal(String(res.benchmark.value_units_per_hour));
         setHasBenchmark(false);
+        
+        if (res.message) {
+          showToast(res.message, "info"); // 🔔 show carried-forward info
+        }
       } else {
         setBenchmarkVal("");
         setHasBenchmark(false);
@@ -333,7 +337,7 @@ export default function Dashboard() {
             <MdSaveAlt size={20} /> Download Report
           </button>
         </div>
-      </div>
+      </div> 
 
       {/* CHARTS */}
       <div className="grid-layout">

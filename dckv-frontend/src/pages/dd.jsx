@@ -1,480 +1,5 @@
 
 
-// ///////////////////////// Latest working code before past date benchmark field disable  //////////////////////////////////////////////////////////
-
-
-// src/pages/Dashboard.jsx
-import React, { useEffect, useState } from "react";
-import { Line } from "react-chartjs-2";
-
-import {
-  fetchHoods,
-  fetchChartData,
-  setBenchmark,
-  getBenchmark,
-  computeEnergySaved,
-  downloadReport
-} from "../api";
-
-import Toast from "../components/Toast";
-import "chart.js/auto";
-import "./dashboard.css";
-import { MdCalendarMonth, MdSaveAlt, MdLogout } from "react-icons/md";
-import { RiSave3Fill } from "react-icons/ri";
-import { useNavigate } from "react-router-dom";
-
-// ZOOM
-import zoomPlugin from "chartjs-plugin-zoom";
-import { Chart } from "chart.js";
-Chart.register(zoomPlugin);
-
-export default function Dashboard() {
-  const navigate = useNavigate();
-
-  const HOTEL_ID = 1001;
-  const KITCHEN_ID = 1;
-  const MASTER_ID = 11;
-
-  const [hoods, setHoods] = useState([]);
-  const [selectedMid, setSelectedMid] = useState(MASTER_ID);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
-  const [chartData, setChartData] = useState(null);
-
-  const [benchmark, setBenchmarkVal] = useState("");
-  const [energySaved, setEnergySaved] = useState(null);
-  const [duration, setDuration] = useState(0);
-  const [energyConsumed, setEnergyConsumed] = useState(0);
-
-  const [hasBenchmark, setHasBenchmark] = useState(false);
-  const [toast, setToast] = useState(null);
-
-  function showToast(message, type = "info") {
-    setToast({ message, type });
-  }
-
-  useEffect(() => {
-    loadHoods();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]);
-
-  useEffect(() => {
-    loadChart();
-    loadBenchmark();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMid, selectedDate]);
-
-  useEffect(() => {
-    handleEnergySaved();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMid, selectedDate]);
-
-  // -------------------------------------------
-  // Load Hoods
-  // -------------------------------------------
-  async function loadHoods() {
-    try {
-      const res = await fetchHoods(HOTEL_ID, KITCHEN_ID, selectedDate);
-
-      if (res && res.hoods?.length > 0) {
-        const unique = Array.from(new Map(res.hoods.map(h => [h.id, h])).values());
-        setHoods(unique);
-        setSelectedMid(unique.find(h => h.id === MASTER_ID) ? MASTER_ID : unique[0].id);
-      } else {
-        setHoods([{ id: MASTER_ID }]);
-        setSelectedMid(MASTER_ID);
-      }
-    } catch {
-      showToast("Failed to load views", "error");
-    }
-  }
-
-  // -------------------------------------------
-  // Load Chart
-  // -------------------------------------------
-  async function loadChart() {
-    try {
-      const res = await fetchChartData(selectedMid, selectedDate);
-
-      if (res.error) {
-        showToast(res.error, "error");
-        setChartData({ x: [], exhaust: [], voltage: [], energy: [], temperature: [], smoke: [], damper: [] });
-      } else {
-        // ensure arrays exist
-        setChartData({
-          x: Array.isArray(res.x) ? res.x : [],
-          exhaust: Array.isArray(res.exhaust) ? res.exhaust : [],
-          voltage: Array.isArray(res.voltage) ? res.voltage : [],
-          energy: Array.isArray(res.energy) ? res.energy : [],
-          temperature: Array.isArray(res.temperature) ? res.temperature : [],
-          smoke: Array.isArray(res.smoke) ? res.smoke : [],
-          damper: Array.isArray(res.damper) ? res.damper : []
-        });
-      }
-    } catch {
-      showToast("Failed to load chart", "error");
-      setChartData({ x: [], exhaust: [], voltage: [], energy: [], temperature: [], smoke: [], damper: [] });
-    }
-  }
-
-  // -------------------------------------------
-  // Benchmark Load + Lock Logic
-  // -------------------------------------------
-  async function loadBenchmark() {
-    try {
-      const res = await getBenchmark(HOTEL_ID, KITCHEN_ID, selectedDate);
-
-      if (res.found === true) {
-        setBenchmarkVal(String(res.benchmark.value_units_per_hour));
-        setHasBenchmark(true); // lock field
-      } else if (res.carried === true) {
-        setBenchmarkVal(String(res.benchmark.value_units_per_hour));
-        setHasBenchmark(false); // allow editing when carried
-      } else {
-        setBenchmarkVal("");
-        setHasBenchmark(false);
-      }
-    } catch {
-      showToast("Failed to load benchmark", "error");
-    }
-  }
-
-  // -------------------------------------------
-  // Save Benchmark
-  // -------------------------------------------
-  async function handleSetBenchmark() {
-    if (!benchmark || isNaN(parseFloat(benchmark))) {
-      showToast("Please enter numeric value only (Units/Hour).", "error");
-      return;
-    }
-
-    try {
-      const res = await setBenchmark(HOTEL_ID, KITCHEN_ID, parseFloat(benchmark), selectedDate);
-
-      if (res.error) showToast(res.error, "error");
-      else {
-        showToast("Benchmark saved successfully", "success");
-        loadBenchmark();
-      }
-    } catch {
-      showToast("Failed to save benchmark", "error");
-    }
-  }
-
-  // -------------------------------------------
-  // KPI → Energy Saved
-  // -------------------------------------------
-  async function handleEnergySaved() {
-    try {
-      const res = await computeEnergySaved(HOTEL_ID, KITCHEN_ID, selectedMid, selectedDate);
-
-      if (res.error) {
-        showToast(res.error, "error");
-        setEnergySaved(null);
-        setDuration(0);
-        setEnergyConsumed(0);
-        return;
-      }
-
-      setEnergySaved(res.energy_saved ?? 0);
-      setDuration(res.duration_hours ?? 0);
-      setEnergyConsumed(res.energy_consumed ?? 0);
-    } catch {
-      showToast("Failed to compute energy saved", "error");
-      setEnergySaved(null);
-      setDuration(0);
-      setEnergyConsumed(0);
-    }
-  }
-
-  // -----------------------------------------------------------------
-  // Chart OPTIONS (Option A — Same Style For All Charts)
-  // -----------------------------------------------------------------
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: {
-        ticks: { color: "#444", maxRotation: 45, autoSkip: true, maxTicksLimit: 24 },
-        grid: { color: "#eaeaea" }
-      },
-      y: {
-        ticks: { color: "#444" },
-        grid: { color: "#eaeaea" }
-      }
-    },
-    elements: {
-      point: {
-        radius: 3,
-        backgroundColor: "#ff4d4d",
-        borderColor: "#fff",
-        borderWidth: 1
-      },
-      line: {
-        borderWidth: 1.25,
-        borderColor: "#3b82f6",
-        tension: 0.35,
-        fill: false
-      }
-    },
-    plugins: {
-      legend: {
-        labels: { color: "#333", boxWidth: 20 }
-      },
-      zoom: {
-        zoom: {
-          wheel: { enabled: true },
-          pinch: { enabled: true },
-          mode: "x"
-        },
-        pan: {
-          enabled: true,
-          mode: "x"
-        }
-      }
-    }
-  };
-
-  // -----------------------------------------------------------------
-  // helpers to build datasets — we add dataset-level visual props so
-  // every chart has consistent thinner lines & colored dots
-  // -----------------------------------------------------------------
-  function buildLineConfig(labels, data, label, datasetColor = "#3b82f6", pointColor = "#ff4d4d") {
-    // Ensure labels/data lengths match — Chart.js handles mismatched lengths but we try to be tidy
-    const safeLabels = Array.isArray(labels) ? labels : [];
-    const safeData = Array.isArray(data) ? data : [];
-
-    return {
-      labels: safeLabels,
-      datasets: [
-        {
-          label,
-          data: safeData,
-          borderColor: datasetColor,
-          backgroundColor: datasetColor,
-          pointBackgroundColor: pointColor,
-          pointBorderColor: "#ffffff",
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          borderWidth: 1.25,
-          tension: 0.35,
-          fill: false
-        }
-      ]
-    };
-  }
-
-  function formatLabel(mid) {
-    if (mid === MASTER_ID) return "Central Control Unit";
-    return `Hood Control Unit ${mid - 20}`;
-  }
-
-  // -----------------------------------------------------------------
-  // RENDER UI
-  // -----------------------------------------------------------------
-  return (
-    <div className="dash-container">
-      <div className="logout-area">
-        <button
-          className="btn logout-btn glass"
-          onClick={() => {
-            localStorage.removeItem("token");
-            showToast("Logged out", "info");
-            navigate("/login");
-          }}
-        >
-          <MdLogout size={20} /> Logout
-        </button>
-      </div>
-
-      <h1 className="dash-title">DEMAND CONTROLLED KITCHEN VENTILATION (DCKV)</h1>
-
-      {/* TOP BAR */}
-      <div className="top-bar glass">
-        <div className="field-block">
-          <label>Select View</label>
-          <div className="select-box">
-            <select value={selectedMid} onChange={(e) => setSelectedMid(Number(e.target.value))}>
-              {hoods.map(h => (
-                <option key={h.id} value={h.id}>
-                  {formatLabel(h.id)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="field-block">
-          <label>Select Date</label>
-          <div className="input-icon">
-            <MdCalendarMonth size={20} />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              max={new Date().toISOString().split("T")[0]}   // 🔥 Disable future dates
-            />
-          </div>
-        </div>
-
-
-        <div className="field-block">
-          <label>Benchmark (Units/hr)</label>
-          <div className="benchmark-box">
-            <input
-              value={benchmark}
-              onChange={(e) => setBenchmarkVal(e.target.value)}
-              placeholder="Units/hr"
-              disabled={hasBenchmark}
-              style={{
-                backgroundColor: hasBenchmark ? "rgba(0,255,0,0.18)" : "white",
-                cursor: hasBenchmark ? "not-allowed" : "text"
-              }}
-            />
-            <button
-              className="btn small-btn"
-              onClick={handleSetBenchmark}
-              disabled={hasBenchmark}
-              style={{
-                opacity: hasBenchmark ? 0.5 : 1,
-                cursor: hasBenchmark ? "not-allowed" : "pointer"
-              }}
-            >
-              <RiSave3Fill size={20} />
-            </button>
-          </div>
-        </div>
-
-        <div className="download-section">
-          <button className="btn primary" onClick={() => downloadReport(HOTEL_ID, KITCHEN_ID, selectedMid, selectedDate)}>
-            <MdSaveAlt size={20} /> Download Report
-          </button>
-        </div>
-      </div>
-
-      {/* CHARTS */}
-      <div className="grid-layout">
-
-        {/* ---------------- Chart 1 ---------------- */}
-        <div className="glass card">
-          <h4>{selectedMid === MASTER_ID ? "Exhaust Speed" : "Temperature"}</h4>
-
-          <div style={{ height: 320 }}>
-            <Line
-              options={chartOptions}
-              data={buildLineConfig(
-                chartData?.x || [],
-                selectedMid === MASTER_ID ? chartData?.exhaust || [] : chartData?.temperature || [],
-                selectedMid === MASTER_ID ? "Exhaust Speed (%)" : "Temperature (°C)",
-                "#2b9cff",
-                "#ff4d4d"
-              )}
-            />
-          </div>
-
-          {/* Axis Labels */}
-          <div className="axis-labels">
-            <span className="y-axis">
-              {selectedMid === MASTER_ID ? "Speed (%)" : "Temperature (°C)"}
-            </span>
-            <span className="x-axis">Time (HH:MM)</span>
-          </div>
-        </div>
-
-
-        {/* ---------------- Chart 2 ---------------- */}
-        <div className="glass card">
-          <h4>{selectedMid === MASTER_ID ? "Mains Voltage" : "Damper Position"}</h4>
-
-          <div style={{ height: 320 }}>
-            <Line
-              options={chartOptions}
-              data={buildLineConfig(
-                chartData?.x || [],
-                selectedMid === MASTER_ID ? chartData?.voltage || [] : chartData?.damper || [],
-                selectedMid === MASTER_ID ? "Voltage (V)" : "Damper (%)",
-                "#2b9cff",
-                "#ff4d4d"
-              )}
-            />
-          </div>
-
-          {/* Axis Labels */}
-          <div className="axis-labels">
-            <span className="y-axis">
-              {selectedMid === MASTER_ID ? "Voltage (V)" : "Damper (%)"}
-            </span>
-            <span className="x-axis">Time (HH:MM)</span>
-          </div>
-        </div>
-
-
-        {/* ---------------- Chart 3 ---------------- */}
-        <div className="glass card">
-          <h4>{selectedMid === MASTER_ID ? "Energy Consumption (kWh)" : "Smoke"}</h4>
-
-          <div style={{ height: 320 }}>
-            <Line
-              options={chartOptions}
-              data={buildLineConfig(
-                chartData?.x || [],
-                selectedMid === MASTER_ID ? chartData?.energy || [] : chartData?.smoke || [],
-                selectedMid === MASTER_ID ? "Energy (kWh)" : "Smoke",
-                "#2b9cff",
-                "#ff4d4d"
-              )}
-            />
-          </div>
-
-          {/* Axis Labels */}
-          <div className="axis-labels">
-            <span className="y-axis">
-              {selectedMid === MASTER_ID ? "Energy (kWh)" : "Smoke Level"}
-            </span>
-            <span className="x-axis">Time (HH:MM)</span>
-          </div>
-        </div>
-
-      </div>
-
-
-      {/* KPI */}
-      <div className="kpi-row">
-
-        <div className="glass kpi-card kpi-duration">
-          <h4>Duration</h4>
-          <div className="kpi-value">
-            {duration ? `${duration.toFixed(2)} hrs` : "—"}
-          </div>
-        </div>
-
-        <div className="glass kpi-card kpi-consumed">
-          <h4>Total Energy Consumed</h4>
-          <div className="kpi-value">
-            {energyConsumed ? `${energyConsumed.toFixed(2)} kWh` : "—"}
-          </div>
-        </div>
-
-        <div className="glass kpi-card kpi-saved">
-          <h4>Energy Saved</h4>
-          <div className="kpi-value">
-            {energySaved ? `${energySaved.toFixed(2)} kWh` : "—"}
-          </div>
-        </div>
-
-      </div>
-
-      {/* FOOTER */}
-      <footer className="footer glass">
-        © All Rights Reserved — <a href="https://pinesphere.com/" target="_blank" rel="noopener noreferrer">Pinesphere</a>
-      </footer>
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
-  );
-}
-
-
-
 // ///////////////////////// Latest working code before dynamic dropdown  //////////////////////////////////////////////////////////
 
 // src/pages/Dashboard.jsx
@@ -938,4 +463,465 @@ export default function Dashboard() {
 }
 
 
+// ///////////////////////// Before Download Report ////////////////////////////////////////////////////////// 
+
+// src/pages/Dashboard.jsx
+import React, { useEffect, useState } from "react";
+import { Line } from "react-chartjs-2";
+
+import {
+  fetchHoods,
+  fetchChartData,
+  setBenchmark,
+  getBenchmark,
+  computeEnergySaved,
+  downloadReport
+} from "../api";
+
+import Toast from "../components/Toast";
+import "chart.js/auto";
+import "./dashboard.css";
+import { MdCalendarMonth, MdSaveAlt, MdLogout } from "react-icons/md";
+import { RiSave3Fill } from "react-icons/ri";
+import { useNavigate } from "react-router-dom";
+
+// ZOOM
+import zoomPlugin from "chartjs-plugin-zoom";
+import { Chart } from "chart.js";
+Chart.register(zoomPlugin);
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+
+  const HOTEL_ID = 1; 
+  const KITCHEN_ID = 1;
+  const MASTER_ID = 11;
+
+  const [hoods, setHoods] = useState([]);
+  const [selectedMid, setSelectedMid] = useState(MASTER_ID);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [chartData, setChartData] = useState(null);
+
+  const [benchmark, setBenchmarkVal] = useState("");
+  const [energySaved, setEnergySaved] = useState(null);
+  const [duration, setDuration] = useState(0);
+  const [energyConsumed, setEnergyConsumed] = useState(0);
+
+  const [hasBenchmark, setHasBenchmark] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  function showToast(message, type = "info") {
+    setToast({ message, type });
+  }
+
+  useEffect(() => {
+    loadHoods();
+  }, [selectedDate]);
+
+  useEffect(() => {
+    loadChart();
+    loadBenchmark();
+  }, [selectedMid, selectedDate]);
+
+  useEffect(() => {
+    handleEnergySaved();
+  }, [selectedMid, selectedDate]);
+
+  // -------------------------------------------
+  // Load Hoods
+  // -------------------------------------------
+  async function loadHoods() {
+    try {
+      const res = await fetchHoods(HOTEL_ID, KITCHEN_ID, selectedDate);
+
+      if (res && res.hoods?.length > 0) {
+        const unique = Array.from(new Map(res.hoods.map(h => [h.id, h])).values());
+        setHoods(unique);
+        setSelectedMid(unique.find(h => h.id === MASTER_ID) ? MASTER_ID : unique[0].id);
+      } else {
+        setHoods([{ id: MASTER_ID }]);
+        setSelectedMid(MASTER_ID);
+      }
+    } catch {
+      showToast("Failed to load views", "error");
+    }
+  }
+
+  // -------------------------------------------
+  // Load Chart
+  // -------------------------------------------
+  async function loadChart() {
+    try {
+      const res = await fetchChartData(selectedMid, selectedDate);
+
+      if (res.error) {
+        showToast(res.error, "error");
+        setChartData({ x: [], exhaust: [], voltage: [], energy: [], temperature: [], smoke: [], damper: [] });
+      } else {
+        setChartData({
+          x: Array.isArray(res.x) ? res.x : [],
+          exhaust: Array.isArray(res.exhaust) ? res.exhaust : [],
+          voltage: Array.isArray(res.voltage) ? res.voltage : [],
+          energy: Array.isArray(res.energy) ? res.energy : [],
+          temperature: Array.isArray(res.temperature) ? res.temperature : [],
+          smoke: Array.isArray(res.smoke) ? res.smoke : [],
+          damper: Array.isArray(res.damper) ? res.damper : []
+        });
+      }
+    } catch {
+      showToast("Failed to load chart", "error");
+      setChartData({ x: [], exhaust: [], voltage: [], energy: [], temperature: [], smoke: [], damper: [] });
+    }
+  }
+
+  // -------------------------------------------
+  // Benchmark Load + Lock Logic
+  // -------------------------------------------
+  async function loadBenchmark() {
+    try {
+      const res = await getBenchmark(HOTEL_ID, KITCHEN_ID, selectedDate);
+
+      if (res.found === true) {
+        setBenchmarkVal(String(res.benchmark.value_units_per_hour));
+        setHasBenchmark(true);
+      } else if (res.carried === true) {
+        setBenchmarkVal(String(res.benchmark.value_units_per_hour));
+        setHasBenchmark(false);
+      } else {
+        setBenchmarkVal("");
+        setHasBenchmark(false);
+      }
+    } catch {
+      showToast("Failed to load benchmark", "error");
+    }
+  }
+
+  // -------------------------------------------
+  // Save Benchmark
+  // -------------------------------------------
+  async function handleSetBenchmark() {
+    if (!benchmark || isNaN(parseFloat(benchmark))) {
+      showToast("Please enter numeric value only (Units/Hour).", "error");
+      return;
+    }
+
+    try {
+      const res = await setBenchmark(HOTEL_ID, KITCHEN_ID, parseFloat(benchmark), selectedDate);
+
+      if (res.error) showToast(res.error, "error");
+      else {
+        showToast("Benchmark saved successfully", "success");
+        loadBenchmark();
+      }
+    } catch {
+      showToast("Failed to save benchmark", "error");
+    }
+  }
+
+  // -------------------------------------------
+  // KPI → Energy Saved
+  // -------------------------------------------
+  async function handleEnergySaved() {
+    try {
+      const res = await computeEnergySaved(HOTEL_ID, KITCHEN_ID, selectedMid, selectedDate);
+
+      if (res.error) {
+        showToast(res.error, "error");
+        setEnergySaved(null);
+        setEnergyConsumed(0);
+        setDuration(0);
+        return;
+      }
+
+      setEnergySaved(res.energy_saved ?? 0);
+      setEnergyConsumed(res.energy_consumed ?? 0);
+      setDuration(res.duration_hours ?? 0);
+    } catch {
+      showToast("Failed to compute energy saved", "error");
+      setEnergySaved(null);
+      setEnergyConsumed(0);
+      setDuration(0);
+    }
+  }
+
+  // -------------------------------------------
+  // Disable Benchmark if:
+  //  1) Benchmark exists
+  //  2) Selected date is in the past
+  // -------------------------------------------
+  const today = new Date().toISOString().slice(0, 10);
+  const isPastDate = selectedDate < today;
+
+  const disableBenchmarkField = hasBenchmark || isPastDate;
+
+  // -------------------------------------------
+  // Chart OPTIONS
+  // -------------------------------------------
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        ticks: { color: "#444", autoSkip: true, maxTicksLimit: 24 },
+        grid: { color: "#eaeaea" }
+      },
+      y: {
+        ticks: { color: "#444" },
+        grid: { color: "#eaeaea" }
+      }
+    },
+    elements: {
+      point: {
+        radius: 3,
+        backgroundColor: "#ff4d4d",
+        borderColor: "#fff",
+        borderWidth: 1
+      },
+      line: {
+        borderWidth: 1.25,
+        borderColor: "#3b82f6",
+        tension: 0.35,
+        fill: false
+      }
+    },
+    plugins: {
+      legend: { labels: { color: "#333" } },
+      zoom: {
+        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "x" },
+        pan: { enabled: true, mode: "x" }
+      }
+    }
+  };
+
+  function buildLineConfig(labels, data, label, lineColor = "#3b82f6", pointColor = "#ff4d4d") {
+    return {
+      labels,
+      datasets: [
+        {
+          label,
+          data,
+          borderColor: lineColor,
+          pointBackgroundColor: pointColor,
+          pointBorderColor: "#fff",
+          pointRadius: 3,
+          tension: 0.35,
+          borderWidth: 1.25
+        }
+      ]
+    };
+  }
+
+  function formatLabel(mid) {
+    if (mid === MASTER_ID) return "Central Control Unit";
+    return `Hood Control Unit ${mid - 20}`;
+  }
+
+  // -------------------------------------------
+  // RENDER UI
+  // -------------------------------------------
+  return (
+    <div className="dash-container">
+      <div className="logout-area">
+        <button
+          className="btn logout-btn glass"
+          onClick={() => {
+            localStorage.removeItem("token");
+            navigate("/login");
+            showToast("Logged out", "info");
+          }}
+        >
+          <MdLogout size={20} /> Logout
+        </button>
+      </div>
+
+      <h1 className="dash-title">DEMAND CONTROLLED KITCHEN VENTILATION (DCKV)</h1>
+
+      {/* TOP BAR */}
+      <div className="top-bar glass">
+        <div className="field-block">
+          <label>Select View</label>
+          <div className="select-box">
+            <select value={selectedMid} onChange={(e) => setSelectedMid(Number(e.target.value))}>
+              {hoods.map(h => (
+                <option key={h.id} value={h.id}>
+                  {formatLabel(h.id)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="field-block">
+          <label>Select Date</label>
+          <div className="input-icon">
+            <MdCalendarMonth size={20} />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              max={today}   // disable future dates
+            />
+          </div>
+        </div>
+
+        <div className="field-block">
+          <label>Benchmark (Units/hr)</label>
+          <div className="benchmark-box">
+            <input
+              value={benchmark}
+              onChange={(e) => setBenchmarkVal(e.target.value)}
+              placeholder="Units/hr"
+              disabled={disableBenchmarkField}
+              style={{
+                backgroundColor: disableBenchmarkField ? "rgba(0,255,0,0.18)" : "white",
+                cursor: disableBenchmarkField ? "not-allowed" : "text"
+              }}
+            />
+
+            <button
+              className="btn small-btn"
+              onClick={handleSetBenchmark}
+              disabled={disableBenchmarkField}
+              style={{
+                opacity: disableBenchmarkField ? 0.5 : 1,
+                cursor: disableBenchmarkField ? "not-allowed" : "pointer"
+              }}
+            >
+              <RiSave3Fill size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="download-section">
+          <button
+            className="btn primary"
+            onClick={() => downloadReport(HOTEL_ID, KITCHEN_ID, selectedMid, selectedDate)}
+          >
+            <MdSaveAlt size={20} /> Download Report
+          </button>
+        </div>
+      </div> 
+
+      {/* CHARTS */}
+      <div className="grid-layout">
+
+        {/* Chart 1 */}
+        <div className="glass card">
+          <h4>{selectedMid === MASTER_ID ? "Exhaust Speed" : "Temperature"}</h4>
+
+          <div style={{ height: 320 }}>
+            <Line
+              options={chartOptions}
+              data={buildLineConfig(
+                chartData?.x || [],
+                selectedMid === MASTER_ID ? chartData?.exhaust || [] : chartData?.temperature || [],
+                selectedMid === MASTER_ID ? "Exhaust Speed (%)" : "Temperature (°C)",
+                "#2b9cff",
+                "#ff4d4d"
+              )}
+            />
+          </div>
+
+          <div className="axis-labels">
+            <span className="y-axis">
+              {selectedMid === MASTER_ID ? "Y axis - Speed (%)" : "Y axis - Temperature (°C)"}
+            </span>
+            <span className="x-axis">X axis - Time (HH:MM)</span>
+          </div>
+        </div>
+
+        {/* Chart 2 */}
+        <div className="glass card">
+          <h4>{selectedMid === MASTER_ID ? "Mains Voltage" : "Damper Position"}</h4>
+
+          <div style={{ height: 320 }}>
+            <Line
+              options={chartOptions}
+              data={buildLineConfig(
+                chartData?.x || [],
+                selectedMid === MASTER_ID ? chartData?.voltage || [] : chartData?.damper || [],
+                selectedMid === MASTER_ID ? "Voltage (V)" : "Damper (%)",
+                "#2b9cff",
+                "#ff4d4d"
+              )}
+            />
+          </div>
+
+          <div className="axis-labels">
+            <span className="y-axis">
+              {selectedMid === MASTER_ID ? "Y axis - Voltage (V)" : "Y axis - Damper (%)"}
+            </span>
+            <span className="x-axis">X axis - Time (HH:MM)</span>
+          </div>
+        </div>
+
+        {/* Chart 3 */}
+        <div className="glass card">
+          <h4>{selectedMid === MASTER_ID ? "Energy Consumption (kWh)" : "Smoke"}</h4>
+
+          <div style={{ height: 320 }}>
+            <Line
+              options={chartOptions}
+              data={buildLineConfig(
+                chartData?.x || [],
+                selectedMid === MASTER_ID ? chartData?.energy || [] : chartData?.smoke || [],
+                selectedMid === MASTER_ID ? "Energy (kWh)" : "Smoke",
+                "#2b9cff",
+                "#ff4d4d"
+              )}
+            />
+          </div>
+
+          <div className="axis-labels">
+            <span className="y-axis">
+              {selectedMid === MASTER_ID ? "Y axis - Energy (kWh)" : "Y axis - Smoke Level"}
+            </span>
+            <span className="x-axis">X axis - Time (HH:MM)</span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* KPI SECTION — ONLY SHOW FOR MASTER UNIT */}
+      {selectedMid === MASTER_ID && (
+        <div className="kpi-row">
+
+          {/* Duration */}
+          <div className="glass kpi-card kpi-duration">
+            <h4>Duration</h4>
+            <div className="kpi-value">
+              {duration ? `${duration.toFixed(2)} hrs` : "—"}
+            </div>
+          </div>
+
+          {/* Total Energy Consumed */}
+          <div className="glass kpi-card kpi-consumed">
+            <h4>Total Energy Consumed</h4>
+            <div className="kpi-value">
+              {energyConsumed ? `${energyConsumed.toFixed(2)} kWh` : "—"}
+            </div>
+          </div>
+
+          {/* Energy Saved */}
+          <div className="glass kpi-card kpi-saved">
+            <h4>Energy Saved</h4>
+            <div className="kpi-value">
+              {energySaved ? `${energySaved.toFixed(2)} kWh` : "—"}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+
+
+      {/* FOOTER */}
+      <footer className="footer glass">
+        © All Rights Reserved — <a href="https://pinesphere.com/" target="_blank" rel="noopener noreferrer">Pinesphere</a>
+      </footer>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </div>
+  );
+}
 

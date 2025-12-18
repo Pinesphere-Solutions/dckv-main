@@ -24,8 +24,9 @@ import jwt
 from django.conf import settings
 
 USERS = {
-    "admin": "admin123",
-    "athithya": "12345"
+    "admin": "admin@@123",
+    "athithya": "12345",
+    "DCKV-User1": "User1@DCKV"
 }
 
 def create_jwt(username):

@@ -15,7 +15,7 @@ import json
 
 from datetime import datetime
 from django.utils.dateparse import parse_date
-from zoneinfo import ZoneInfo   # 🔥 Recommended in Python 3.9+
+from zoneinfo import ZoneInfo   
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from dckv.models import DeviceReading
@@ -404,39 +404,67 @@ def infer_benchmark_from_data(hotel, kitchen, mid, the_date):
 # ---------- DOWNLOAD REPORT ----------
 @api_view(["GET"])
 def download_report(request):
-    """
-    download CSV for mid/date
-    query: hotel_id, kitchen_id, mid_hid, date
-    """
     import csv
     from django.http import HttpResponse
+    from django.utils.dateparse import parse_date
 
     hotel = int(request.query_params.get("hotel_id"))
     kitchen = int(request.query_params.get("kitchen_id"))
     mid = int(request.query_params.get("mid_hid"))
     d = request.query_params.get("date")
+
     the_date = parse_date(d)
+    if not the_date:
+        return HttpResponse("Invalid date", status=400)
+
     qs = DeviceReading.objects.filter(
         hotel_id=hotel,
         kitchen_id=kitchen,
         mid_hid=mid,
-        date=the_date
+        date=the_date,
+        datetime_end__isnull=False
     ).order_by("datetime_end")
 
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="report_{mid}_{the_date}.csv"'
+    # if not qs.exists():
+    #     return HttpResponse(
+    #         "No data available for the selected date.",
+    #         content_type="text/plain",
+    #         status=404
+    #     )
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = (
+        f'attachment; filename="report_{mid}_{the_date}.csv"'
+    )
+
     writer = csv.writer(response)
-    writer.writerow(["datetime_end", "start_time", "end_time", "temperature", "smoke",
-                    "damper", "exhaust", "voltage", "energy_cum"])
+    writer.writerow([
+        "datetime_end",
+        "start_time",
+        "end_time",
+        "temperature",
+        "smoke",
+        "damper",
+        "exhaust",
+        "voltage",
+        "energy_cum"
+    ])
+
     for r in qs:
         writer.writerow([
-            r.datetime_end.isoformat() if r.datetime_end else "",
+            r.datetime_end.isoformat(),
             r.start_time.isoformat() if r.start_time else "",
             r.end_time.isoformat() if r.end_time else "",
-            r.temperature, r.smoke, r.damper_pos, r.exhaust_speed,
-            r.mains_voltage, r.energy_cum
+            r.temperature,
+            r.smoke,
+            r.damper_pos,
+            r.exhaust_speed,
+            r.mains_voltage,
+            r.energy_cum
         ])
+
     return response
+
 
 
 
@@ -455,4 +483,16 @@ def get_hoods(request, hotel_id, kitchen_id, date):
 
     hoods = [{"id": 11}] + [{"id": mid} for mid in mids if mid != 11]
 
-    return JsonResponse({"hoods": hoods})
+    return JsonResponse({"hoods": hoods}) 
+
+
+
+# @api_view(["GET"])
+# def context(request):
+#     row = DeviceReading.objects.order_by("-created_at").first()
+#     if not row:
+#         return Response({"hotel_id": None, "kitchen_id": None})
+#     return Response({
+#         "hotel_id": row.hotel_id,
+#         "kitchen_id": row.kitchen_id
+#     })  
