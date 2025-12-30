@@ -123,12 +123,49 @@ export async function computeEnergySaved(
 }
 
 /* ---------- DOWNLOAD REPORT ---------- */
-export function downloadReport(
+// export function downloadReport(
+//   hotel_id,
+//   kitchen_id,
+//   mid_hid,
+//   dateStr
+// ) {
+//   const url = `${API_BASE}/download-report/?hotel_id=${hotel_id}&kitchen_id=${kitchen_id}&mid_hid=${mid_hid}&date=${dateStr}`;
+//   window.open(url, "_blank");
+// }
+
+
+
+
+/* ---------- DOWNLOAD REPORT ---------- */
+export async function downloadReport(
   hotel_id,
   kitchen_id,
   mid_hid,
   dateStr
 ) {
   const url = `${API_BASE}/download-report/?hotel_id=${hotel_id}&kitchen_id=${kitchen_id}&mid_hid=${mid_hid}&date=${dateStr}`;
-  window.open(url, "_blank");
+  
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      cache: 'no-cache', // Disable cache
+    });
+    
+    if (!response.ok) {
+      throw new Error('Download failed');
+    }
+    
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `report_${mid_hid}_${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (error) {
+    console.error('Download error:', error);
+    alert('Failed to download report');
+  }
 }
