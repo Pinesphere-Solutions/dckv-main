@@ -425,47 +425,53 @@ def download_report(request):
         datetime_end__isnull=False
     ).order_by("datetime_end")
 
-    # if not qs.exists():
-    #     return HttpResponse(
-    #         "No data available for the selected date.",
-    #         content_type="text/plain",
-    #         status=404
-    #     )
-
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = (
         f'attachment; filename="report_{mid}_{the_date}.csv"'
     )
 
     writer = csv.writer(response)
+    # Updated header with all D1-D15 fields
     writer.writerow([
-        "datetime_end",
-        "start_time",
-        "end_time",
-        "temperature",
-        "smoke",
-        "damper",
-        "exhaust",
-        "voltage",
-        "energy_cum"
+        "hotel_id",          # D1
+        "kitchen_id",        # D2
+        "date",              # D3
+        "start_time",        # D4
+        "end_time",          # D5
+        "mid_hid",           # D6
+        "temperature",       # D7
+        "smoke",             # D8
+        "damper",            # D9
+        "exhaust",           # D10
+        "voltage",           # D11
+        "energy_cum",        # D12
+        "log_id",            # D13
+        "energy_interval",   # D14
+        "interval_minutes",  # D15
+        "datetime_end"       # Added for reference
     ])
 
     for r in qs:
         writer.writerow([
-            r.datetime_end.isoformat(),
+            r.hotel_id,
+            r.kitchen_id,
+            r.date.isoformat(),
             r.start_time.isoformat() if r.start_time else "",
             r.end_time.isoformat() if r.end_time else "",
+            r.mid_hid,
             r.temperature,
             r.smoke,
             r.damper_pos,
             r.exhaust_speed,
             r.mains_voltage,
-            r.energy_cum
+            r.energy_cum,
+            r.log_id,
+            r.energy_interval,
+            r.interval_minutes,
+            r.datetime_end.isoformat() if r.datetime_end else ""
         ])
 
     return response
-
-
 
 
 

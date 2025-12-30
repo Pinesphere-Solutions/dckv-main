@@ -401,42 +401,42 @@ def infer_benchmark_from_data(hotel, kitchen, mid, the_date):
 
 
 
-# ---------- DOWNLOAD REPORT ----------
-@api_view(["GET"])
-def download_report(request):
-    """
-    download CSV for mid/date
-    query: hotel_id, kitchen_id, mid_hid, date
-    """
-    import csv
-    from django.http import HttpResponse
+# # ---------- DOWNLOAD REPORT ----------
+# @api_view(["GET"])
+# def download_report(request):
+#     """
+#     download CSV for mid/date
+#     query: hotel_id, kitchen_id, mid_hid, date
+#     """
+#     import csv
+#     from django.http import HttpResponse
 
-    hotel = int(request.query_params.get("hotel_id"))
-    kitchen = int(request.query_params.get("kitchen_id"))
-    mid = int(request.query_params.get("mid_hid"))
-    d = request.query_params.get("date")
-    the_date = parse_date(d)
-    qs = DeviceReading.objects.filter(
-        hotel_id=hotel,
-        kitchen_id=kitchen,
-        mid_hid=mid,
-        date=the_date
-    ).order_by("datetime_end")
+#     hotel = int(request.query_params.get("hotel_id"))
+#     kitchen = int(request.query_params.get("kitchen_id"))
+#     mid = int(request.query_params.get("mid_hid"))
+#     d = request.query_params.get("date")
+#     the_date = parse_date(d)
+#     qs = DeviceReading.objects.filter(
+#         hotel_id=hotel,
+#         kitchen_id=kitchen,
+#         mid_hid=mid,
+#         date=the_date
+#     ).order_by("datetime_end")
 
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="report_{mid}_{the_date}.csv"'
-    writer = csv.writer(response)
-    writer.writerow(["datetime_end", "start_time", "end_time", "temperature", "smoke",
-                    "damper", "exhaust", "voltage", "energy_cum"])
-    for r in qs:
-        writer.writerow([
-            r.datetime_end.isoformat() if r.datetime_end else "",
-            r.start_time.isoformat() if r.start_time else "",
-            r.end_time.isoformat() if r.end_time else "",
-            r.temperature, r.smoke, r.damper_pos, r.exhaust_speed,
-            r.mains_voltage, r.energy_cum
-        ])
-    return response
+#     response = HttpResponse(content_type='text/csv')
+#     response['Content-Disposition'] = f'attachment; filename="report_{mid}_{the_date}.csv"'
+#     writer = csv.writer(response)
+#     writer.writerow(["datetime_end", "start_time", "end_time", "temperature", "smoke",
+#                     "damper", "exhaust", "voltage", "energy_cum"])
+#     for r in qs:
+#         writer.writerow([
+#             r.datetime_end.isoformat() if r.datetime_end else "",
+#             r.start_time.isoformat() if r.start_time else "",
+#             r.end_time.isoformat() if r.end_time else "",
+#             r.temperature, r.smoke, r.damper_pos, r.exhaust_speed,
+#             r.mains_voltage, r.energy_cum
+#         ])
+#     return response
 
 
 
